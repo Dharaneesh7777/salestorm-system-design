@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SaleStorm | Ultra High-Concurrency Flash Sale Engine</title>
+  <meta name="description" content="Mission-critical, high-concurrency flash sale and saga orchestration engine capable of handling 10,000 concurrent requests with zero oversell.">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <header>
+    <div class="logo-group">
+      <div class="logo-icon">⚡</div>
+      <div class="logo-text">
+        <h1>SALESTORM</h1>
+        <p>Ultra High-Concurrency Flash Sale Engine & Saga Orchestrator</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="badge-live">
+        <span class="pulse-dot"></span>
+        <span id="gate-sync-status">Gatekeeper in sync</span>
+      </div>
+      <a href="/swagger-ui/index.html" target="_blank" class="btn-link">
+        <span>📖 Swagger API</span>
+      </a>
+      <a href="/h2-console" target="_blank" class="btn-link">
+        <span>🗄️ H2 Console</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Real-time Stats Grid -->
+  <section class="stats-grid">
+    <div class="stat-card glass-panel" style="--card-color: var(--accent-cyan);">
+      <div class="stat-header">
+        <span>AVAILABLE STOCK</span>
+        <span>📦</span>
+      </div>
+      <div class="stat-value" id="stat-available">--</div>
+      <div class="stat-sub">Ready for instant checkout</div>
+    </div>
+
+    <div class="stat-card glass-panel" style="--card-color: var(--accent-amber);">
+      <div class="stat-header">
+        <span>RESERVED (IN-FLIGHT)</span>
+        <span>⏳</span>
+      </div>
+      <div class="stat-value" id="stat-reserved">--</div>
+      <div class="stat-sub">300s TTL protected</div>
+    </div>
+
+    <div class="stat-card glass-panel" style="--card-color: var(--accent-pink);">
+      <div class="stat-header">
+        <span>SOLD & CONFIRMED</span>
+        <span>🎯</span>
+      </div>
+      <div class="stat-value" id="stat-sold">--</div>
+      <div class="stat-sub">Strictly ≤ 100 max cap</div>
+    </div>
+
+    <div class="stat-card glass-panel" style="--card-color: var(--accent-purple);">
+      <div class="stat-header">
+        <span>IN-MEMORY GATE</span>
+        <span>🛡️</span>
+      </div>
+      <div class="stat-value" id="stat-gate">--</div>
+      <div class="stat-sub">Atomic traffic shedder</div>
+    </div>
+
+    <div class="stat-card glass-panel" style="--card-color: var(--accent-green);">
+      <div class="stat-header">
+        <span>TOTAL REVENUE</span>
+        <span>💰</span>
+      </div>
+      <div class="stat-value" id="stat-revenue">$0.00</div>
+      <div class="stat-sub">Confirmed payment volume</div>
+    </div>
+  </section>
+
+  <!-- Main Grid: Flash Sale Storefront & Stress Test Simulator -->
+  <div class="main-grid">
+    
+    <!-- Left Column: Flash Sale Storefront & Interactive Buy -->
+    <div class="product-card glass-panel">
+      <div class="product-hero">
+        <div class="product-img-wrapper">
+          <img src="/images/product.jpg" alt="Flash Sale Quantum Watch" class="product-img">
+        </div>
+        <div class="product-details">
+          <span class="product-badge">🔥 LIMITED FLASH SALE</span>
+          <h2>Quantum Chrono X1 - Founder's Edition</h2>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+            Next-gen holographic wearable with atomic synchronization, neural pulse monitor, and sapphire crystal display.
+          </p>
+          <div class="pricing-row">
+            <span class="price-current">$99.99</span>
+            <span class="price-original">$199.99</span>
+            <span class="price-discount">50% OFF (Deal Pricing)</span>
+          </div>
+          
+          <div class="stock-bar-wrapper">
+            <div class="stock-bar-labels">
+              <span id="stock-progress-label">Stock Status</span>
+              <span>100 Units Cap</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="stock-progress-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Single-User Buy & Pay Action Box -->
+      <div class="action-box">
+        <div class="action-form">
+          <div class="form-group">
+            <label for="input-customer-id">Customer ID (Auth Stub)</label>
+            <input type="number" id="input-customer-id" class="form-control" value="10001">
+          </div>
+          <div class="form-group">
+            <label for="input-idemp-key">Idempotency Key (<button id="btn-gen-idemp" style="background:none; border:none; color:var(--accent-cyan); cursor:pointer; font-size:11px;">Generate New</button>)</label>
+            <input type="text" id="input-idemp-key" class="form-control" value="IDEMP-DEMO-001">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label for="input-coupon">Coupon Code (Optional)</label>
+          <input type="text" id="input-coupon" class="form-control" placeholder="e.g. FLASH10">
+        </div>
+
+        <button id="btn-buy" class="btn-primary">
+          <span>⚡ Instant Buy ($99.99)</span>
+        </button>
+
+        <!-- Active Reservation & Payment Box -->
+        <div id="reservation-panel" class="reservation-active-panel" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <span style="font-size: 13px; font-weight: 700; color: var(--accent-cyan);">Stock Reserved! Order ID:</span>
+              <span id="res-order-id" style="font-size: 12px; color: var(--text-primary); margin-left: 4px; font-family: monospace;"></span>
+            </div>
+            <div class="res-timer-badge">
+              <span>Expires in:</span>
+              <span id="res-timer">5:00</span>
+            </div>
+          </div>
+
+          <!-- Saga Stepper -->
+          <div class="saga-stepper">
+            <div class="step-item" id="step-created">
+              <div class="step-circle">1</div>
+              <span class="step-label">Created</span>
+            </div>
+            <div class="step-item active" id="step-reserved">
+              <div class="step-circle">2</div>
+              <span class="step-label">Reserved</span>
+            </div>
+            <div class="step-item" id="step-payment_pending">
+              <div class="step-circle">3</div>
+              <span class="step-label">Payment</span>
+            </div>
+            <div class="step-item" id="step-confirmed">
+              <div class="step-circle">4</div>
+              <span class="step-label">Confirmed</span>
+            </div>
+            <div class="step-item" id="step-shipped">
+              <div class="step-circle">5</div>
+              <span class="step-label">Shipped</span>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
+            <div>
+              <span style="font-size: 12px; color: var(--text-secondary);">Total to Pay: </span>
+              <span id="res-amount" style="font-size: 18px; font-weight: 800; color: #fff;">$99.99</span>
+            </div>
+            <button id="btn-pay" class="btn-primary" style="width: auto; padding: 10px 24px;">
+              <span>💳 Pay Now</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Right Column: Interactive Concurrency Simulator -->
+    <div class="simulator-card glass-panel">
+      <div>
+        <div class="card-title-group">
+          <h2>⚡ Concurrent Load Simulator</h2>
+          <button id="btn-reset-stock" class="btn-reset">🔄 Reset Stock</button>
+        </div>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 18px;">
+          Fire thousands of simultaneous buy requests against the multi-layer gatekeeper to verify zero-oversell safety and sub-millisecond shedding.
+        </p>
+
+        <div class="sim-controls">
+          <div>
+            <span style="font-size: 12px; color: var(--text-secondary); font-weight: 500; display: block; margin-bottom: 8px;">Request Presets:</span>
+            <div class="preset-pills">
+              <button class="pill-btn active" data-reqs="1000">1,000 Reqs</button>
+              <button class="pill-btn" data-reqs="2500">2,500 Reqs</button>
+              <button class="pill-btn" data-reqs="5000">5,000 Reqs</button>
+              <button class="pill-btn" data-reqs="10000">10,000 Reqs</button>
+            </div>
+          </div>
+
+          <div class="range-slider-group">
+            <div class="range-labels">
+              <span>Concurrent Volume</span>
+              <span id="sim-requests-val" style="color: var(--accent-cyan); font-weight: 700;">1,000</span>
+            </div>
+            <input type="range" id="sim-requests-range" min="100" max="10000" step="100" value="1000">
+          </div>
+
+          <button id="btn-launch-sim" class="btn-sim">
+            <span>🚀 Launch Concurrent Stress Test</span>
+          </button>
+        </div>
+
+        <!-- Simulation Results Panel -->
+        <div id="sim-results" class="sim-results-box" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
+            <span style="font-size: 13px; font-weight: 700; color: var(--accent-pink);">📊 Benchmark Telemetry</span>
+            <span id="res-conservation" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(16, 185, 129, 0.2); color: #34d399;">100% INVARIANT</span>
+          </div>
+
+          <div class="sim-metrics-grid">
+            <div class="metric-cell">
+              <div class="label">Throughput</div>
+              <div class="val" id="res-throughput">-- req/s</div>
+            </div>
+            <div class="metric-cell">
+              <div class="label">Duration</div>
+              <div class="val" id="res-duration">-- s</div>
+            </div>
+            <div class="metric-cell">
+              <div class="label">p95 Latency</div>
+              <div class="val" id="res-p95" style="color: var(--accent-cyan);">-- ms</div>
+            </div>
+            <div class="metric-cell">
+              <div class="label">p99 Latency</div>
+              <div class="val" id="res-p99">-- ms</div>
+            </div>
+            <div class="metric-cell">
+              <div class="label">Total Sold</div>
+              <div class="val" id="res-sold" style="color: var(--accent-green);">-- units</div>
+            </div>
+            <div class="metric-cell">
+              <div class="label">Traffic Shed</div>
+              <div class="val" id="res-shed" style="color: var(--text-muted);">--</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Multi-Layer Protection Architecture Grid -->
+  <section class="arch-card glass-panel">
+    <h2 style="font-size: 20px; font-weight: 700;">🛡️ 4-Layer Zero-Oversell Protection Architecture</h2>
+    <div class="arch-layers-grid">
+      <div class="layer-item">
+        <div class="layer-num">1</div>
+        <div class="layer-content">
+          <h3>In-Memory StockGate</h3>
+          <p>Atomic non-blocking counter sheds 99% of excess traffic in &lt;1ms before touching database connections.</p>
+        </div>
+      </div>
+      <div class="layer-item">
+        <div class="layer-num">2</div>
+        <div class="layer-content">
+          <h3>Idempotency Store</h3>
+          <p>Deduplicates duplicate user clicks and network retries using SHA-256 payload hashing.</p>
+        </div>
+      </div>
+      <div class="layer-item">
+        <div class="layer-num">3</div>
+        <div class="layer-content">
+          <h3>Atomic SQL Guard</h3>
+          <p><code>WHERE available &gt; 0</code> conditional row updates strictly guarantee exact conservation at the database layer.</p>
+        </div>
+      </div>
+      <div class="layer-item">
+        <div class="layer-num">4</div>
+        <div class="layer-content">
+          <h3>Outbox & Saga Orchestrator</h3>
+          <p>Event-driven transactional outbox pattern ensures resilient payment processing and automatic stock compensation.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Terminal Audit Logs -->
+  <section class="terminal-card glass-panel">
+    <div class="terminal-header">
+      <span style="font-size: 14px; font-weight: 700; color: var(--text-secondary);">🖥️ LIVE EVENT FEED & SAGA AUDIT LOG</span>
+      <span style="font-size: 12px; color: var(--text-muted);">Auto-scrolling</span>
+    </div>
+    <div class="terminal-body" id="terminal-logs">
+      <!-- Dynamic log entries will appear here -->
+    </div>
+  </section>
+</div>
+
+<!-- Application Logic -->
+<script src="/js/app.js"></script>
+</body>
+</html>

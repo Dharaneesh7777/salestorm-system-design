@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SALESTORM War Room | Mission-Critical Flash Sale Engine</title>
+  <meta name="description" content="Real-time telemetry, fault injection, scenario validation, and high-concurrency simulation dashboard for SaleStorm.">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Chart.js via cdnjs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <!-- War Room Stylesheet -->
+  <link rel="stylesheet" href="/dashboard.css">
+</head>
+<body>
+
+<div class="war-room-container">
+
+  <!-- 1. Top Bar -->
+  <header class="top-bar">
+    <div class="brand-section">
+      <div class="brand-badge">⚡</div>
+      <div class="brand-title">
+        <h1>SALESTORM WAR ROOM</h1>
+        <p>Mission-Critical High-Concurrency Flash Sale Engine & Saga Telemetry</p>
+      </div>
+    </div>
+    <div class="top-indicators">
+      <div id="sse-status-badge" class="indicator-badge sse-badge">
+        <span class="dot-pulse"></span>
+        <span>Live Stream: Connecting...</span>
+      </div>
+      <div id="invariant-status-badge" class="indicator-badge invariant-badge">
+        Invariant OK: available + reserved + sold == total
+      </div>
+    </div>
+  </header>
+
+  <!-- 2. KPI Cards Row -->
+  <section class="kpi-grid">
+    <div class="kpi-card" style="--kpi-accent: var(--accent-cyan);">
+      <div class="kpi-header">
+        <span>Available Stock</span>
+        <span>📦</span>
+      </div>
+      <div class="kpi-value" id="kpi-available">--</div>
+      <div class="kpi-sub">Ready for instant acquire</div>
+      <div class="kpi-progress">
+        <div id="bar-avail" class="kpi-progress-bar" style="width: 0%;"></div>
+      </div>
+    </div>
+
+    <div class="kpi-card" style="--kpi-accent: var(--accent-amber);">
+      <div class="kpi-header">
+        <span>Reserved Stock</span>
+        <span>⏳</span>
+      </div>
+      <div class="kpi-value" id="kpi-reserved">--</div>
+      <div class="kpi-sub">300s TTL protected</div>
+      <div class="kpi-progress">
+        <div id="bar-res" class="kpi-progress-bar" style="width: 0%; background: var(--accent-amber);"></div>
+      </div>
+    </div>
+
+    <div class="kpi-card" style="--kpi-accent: var(--accent-pink);">
+      <div class="kpi-header">
+        <span>Sold Stock</span>
+        <span>🎯</span>
+      </div>
+      <div class="kpi-value" id="kpi-sold">--</div>
+      <div class="kpi-sub">Target: 100 units max</div>
+      <div class="kpi-progress">
+        <div id="bar-sold" class="kpi-progress-bar" style="width: 0%; background: var(--accent-pink);"></div>
+      </div>
+    </div>
+
+    <div class="kpi-card" style="--kpi-accent: var(--accent-purple);">
+      <div class="kpi-header">
+        <span>StockGate Count</span>
+        <span>🛡️</span>
+      </div>
+      <div class="kpi-value" id="kpi-gate">--</div>
+      <div class="kpi-sub">In-Memory / Redis gate</div>
+    </div>
+
+    <div class="kpi-card" style="--kpi-accent: var(--accent-blue);">
+      <div class="kpi-header">
+        <span>Gate Drift</span>
+        <span>⚖️</span>
+      </div>
+      <div class="kpi-value" id="kpi-drift">0</div>
+      <div class="kpi-sub">Gate counter - DB available</div>
+    </div>
+
+    <div class="kpi-card" style="--kpi-accent: var(--accent-emerald);">
+      <div class="kpi-header">
+        <span>Active Reservations</span>
+        <span>⚡</span>
+      </div>
+      <div class="kpi-value" id="kpi-active-res">--</div>
+      <div class="kpi-sub">In-flight payment phase</div>
+    </div>
+
+    <div class="kpi-card" style="--kpi-accent: var(--accent-rose);">
+      <div class="kpi-header">
+        <span>Outbox Backlog</span>
+        <span>📨</span>
+      </div>
+      <div class="kpi-value" id="kpi-outbox">--</div>
+      <div class="kpi-sub">Unpublished event rows</div>
+    </div>
+  </section>
+
+  <!-- 3. Charts Grid -->
+  <section class="charts-grid">
+    <div class="panel-card chart-card">
+      <h3>Stock Breakdown</h3>
+      <div class="chart-canvas-wrapper">
+        <canvas id="chart-doughnut"></canvas>
+      </div>
+    </div>
+
+    <div class="panel-card chart-card">
+      <h3>Live Rolling Series (Last 60s)</h3>
+      <div class="chart-canvas-wrapper">
+        <canvas id="chart-timeseries"></canvas>
+      </div>
+    </div>
+
+    <div class="panel-card chart-card">
+      <h3>Payments By Status</h3>
+      <div class="chart-canvas-wrapper">
+        <canvas id="chart-payments"></canvas>
+      </div>
+    </div>
+
+    <div class="panel-card chart-card">
+      <h3>Orders By Status</h3>
+      <div class="chart-canvas-wrapper">
+        <canvas id="chart-orders"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Operations Grid: Flash Sale Controller & Scenarios Runner -->
+  <div class="ops-grid">
+
+    <!-- Flash Sale Simulation & Fault Control Panel -->
+    <div class="panel-card">
+      <div class="section-title">
+        <span>⚡ Flash Sale Control & Fault Injection</span>
+      </div>
+
+      <div class="inputs-row">
+        <div class="form-item">
+          <label>Users / Reqs</label>
+          <input type="number" id="input-users" class="form-input" value="10000">
+        </div>
+        <div class="form-item">
+          <label>Stock</label>
+          <input type="number" id="input-stock" class="form-input" value="100">
+        </div>
+        <div class="form-item">
+          <label>Duplicate %</label>
+          <input type="number" id="input-dup-pct" class="form-input" value="2">
+        </div>
+        <div class="form-item">
+          <label>Payment Fail %</label>
+          <input type="number" id="input-fail-pct" class="form-input" value="5">
+        </div>
+        <div class="form-item">
+          <label>Order Down (s)</label>
+          <input type="number" id="input-down-secs" class="form-input" value="0">
+        </div>
+      </div>
+
+      <div class="btn-group-ops">
+        <button id="btn-run-sim" class="btn-primary-action">⚡ Run Flash Sale</button>
+        <button id="btn-reset-all" class="btn-danger-action">🔄 Reset State</button>
+      </div>
+
+      <!-- Fault Injection Box -->
+      <div class="faults-box">
+        <div class="faults-title">Fault Injection Toggles</div>
+        <div class="faults-controls">
+          <div style="display: flex; gap: 4px; align-items: center;">
+            <span style="font-size: 11px; color: var(--text-dim);">Gateway:</span>
+            <button class="fault-btn-toggle btn-gw-fault active" data-mode="NORMAL">Normal</button>
+            <button class="fault-btn-toggle btn-gw-fault" data-mode="SLOW">Slow (2s)</button>
+            <button class="fault-btn-toggle btn-gw-fault" data-mode="DOWN">Down</button>
+            <button class="fault-btn-toggle btn-gw-fault" data-mode="ALWAYS_DECLINE">Decline All</button>
+          </div>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <button id="toggle-order-service" class="fault-btn-toggle">Order Service: UP</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Simulation Status -->
+      <div class="sim-status-box">
+        <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim);">
+          <span>Simulation Progress</span>
+          <span id="sim-progress-label">0 / 0 (0%)</span>
+        </div>
+        <div class="sim-progress-track">
+          <div id="sim-progress-bar" class="sim-progress-fill"></div>
+        </div>
+        <div class="sim-telemetry-row">
+          <span>Sent: <strong id="sim-sent">0</strong></span>
+          <span>Completed: <strong id="sim-completed">0</strong></span>
+          <span>p50: <strong id="sim-p50">0ms</strong></span>
+          <span>p95: <strong id="sim-p95">0ms</strong></span>
+          <span>p99: <strong id="sim-p99">0ms</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scenarios Validation Panel -->
+    <div class="panel-card">
+      <div class="section-title">
+        <span>🧪 Automated Demo Scenarios</span>
+      </div>
+
+      <div class="scenarios-grid">
+        <button class="scenario-btn" data-scenario="LAST_ITEM">
+          <div class="sc-name">LAST_ITEM</div>
+          <div class="sc-desc">1 stock unit vs 2 concurrent buyers</div>
+        </button>
+        <button class="scenario-btn" data-scenario="FULL_10000">
+          <div class="sc-name">FULL_10000</div>
+          <div class="sc-desc">10k requests, 100 stock, 95% pay</div>
+        </button>
+        <button class="scenario-btn" data-scenario="DUPLICATES">
+          <div class="sc-name">DUPLICATES</div>
+          <div class="sc-desc">100 duplicate idempotent keys</div>
+        </button>
+        <button class="scenario-btn" data-scenario="PAYMENT_FAILURES">
+          <div class="sc-name">PAYMENT_FAILURES</div>
+          <div class="sc-desc">Declined payments release & re-sold</div>
+        </button>
+        <button class="scenario-btn" data-scenario="ORDER_SERVICE_DOWN">
+          <div class="sc-name">ORDER_DOWN</div>
+          <div class="sc-desc">Outbox backlog & recovery</div>
+        </button>
+        <button class="scenario-btn" data-scenario="GATEWAY_DOWN">
+          <div class="sc-name">GATEWAY_DOWN</div>
+          <div class="sc-desc">Circuit breaker trip & isolation</div>
+        </button>
+      </div>
+
+      <!-- Result Banner for Screenshot Verification -->
+      <div id="scenario-result-banner" class="scenario-banner">
+        <!-- Dynamic checklist injected by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Order Lookup Box -->
+  <section class="panel-card order-lookup-card">
+    <div class="section-title">
+      <span>🔍 Order Timeline & Saga State Inspector</span>
+    </div>
+    <div class="lookup-bar">
+      <input type="text" id="lookup-order-id" class="lookup-input" placeholder="Enter Order ID (e.g. ord_abc123 or paste UUID)...">
+      <button id="btn-lookup-order" class="btn-primary-action" style="flex: 0 0 160px;">Inspect Timeline</button>
+    </div>
+    <div id="order-timeline-box" class="timeline-view">
+      <!-- Dynamic timeline stepper -->
+    </div>
+  </section>
+
+  <!-- 6. Real-Time Tables (Polled Every 2s) -->
+  <section class="panel-card">
+    <div class="tables-tabs">
+      <button class="tab-btn active" data-tab="reservations">Reservations (50)</button>
+      <button class="tab-btn" data-tab="orders">Orders (50)</button>
+      <button class="tab-btn" data-tab="payments">Payments (50)</button>
+      <button class="tab-btn" data-tab="events">Event Log (100)</button>
+    </div>
+
+    <!-- Reservations Table -->
+    <div id="tab-content-reservations" class="table-section table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Reservation ID</th>
+            <th>Customer</th>
+            <th>Order ID</th>
+            <th>Status</th>
+            <th>Expires In</th>
+            <th>Idempotency Key</th>
+          </tr>
+        </thead>
+        <tbody id="table-reservations-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Orders Table -->
+    <div id="tab-content-orders" class="table-section table-wrapper" style="display: none;">
+      <table>
+        <thead>
+          <tr>
+            <th>Order ID</th>
+            <th>Customer</th>
+            <th>Status</th>
+            <th>Total Amount</th>
+            <th>Currency</th>
+            <th>Created At</th>
+          </tr>
+        </thead>
+        <tbody id="table-orders-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Payments Table -->
+    <div id="tab-content-payments" class="table-section table-wrapper" style="display: none;">
+      <table>
+        <thead>
+          <tr>
+            <th>Payment ID</th>
+            <th>Order ID</th>
+            <th>Status</th>
+            <th>Amount</th>
+            <th>Gateway Ref</th>
+            <th>Created At</th>
+          </tr>
+        </thead>
+        <tbody id="table-payments-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Events Table -->
+    <div id="tab-content-events" class="table-section table-wrapper" style="display: none;">
+      <table>
+        <thead>
+          <tr>
+            <th>Created At</th>
+            <th>Event Type</th>
+            <th>Aggregate</th>
+            <th>Order ID</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="table-events-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+
+<!-- Client App Script -->
+<script src="/dashboard.js"></script>
+</body>
+</html>
